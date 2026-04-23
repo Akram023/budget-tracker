@@ -6,6 +6,79 @@
 <title>ExpenseIQ – Monthly Expense Tracker</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- ══ FIREBASE SDK ══ -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, set, get, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAfy7daTRyOZSnS8bxkchKZboCaLfV3YW8",
+    authDomain: "budget-tracker-542de.firebaseapp.com",
+    databaseURL: "https://budget-tracker-542de-default-rtdb.firebaseio.com",
+
+    projectId: "budget-tracker-542de",
+    storageBucket: "budget-tracker-542de.firebasestorage.app",
+    messagingSenderId: "797625916679",
+    appId: "1:797625916679:web:3de29ede284013953e79a2"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  // ── Firebase save function ──
+  window.firebaseSave = async function(expenses, settings, months) {
+    try {
+      await set(ref(db, 'expenseiq/data'), {
+        expenses: expenses,
+        settings: settings,
+        months: months,
+        lastUpdated: new Date().toISOString()
+      });
+      // Update Firebase status indicator
+      const dot = document.getElementById('fbDot');
+      const txt = document.getElementById('fbStatus');
+      if(dot) { dot.style.background='#10b981'; dot.style.boxShadow='0 0 7px rgba(16,185,129,0.5)'; }
+      if(txt) txt.textContent = '✅ Firebase synced — ' + new Date().toLocaleTimeString('en-IN');
+    } catch(e) {
+      console.error('Firebase save error:', e);
+      const txt = document.getElementById('fbStatus');
+      if(txt) txt.textContent = '❌ Firebase sync failed';
+    }
+  };
+
+  // ── Firebase load function ──
+  window.firebaseLoad = async function() {
+    try {
+      const snapshot = await get(ref(db, 'expenseiq/data'));
+      if (snapshot.exists()) {
+        return snapshot.val();
+      }
+      return null;
+    } catch(e) {
+      console.error('Firebase load error:', e);
+      return null;
+    }
+  };
+
+  // ── Real-time listener (auto sync across devices) ──
+  window.firebaseListen = function(callback) {
+    onValue(ref(db, 'expenseiq/data'), (snapshot) => {
+      if (snapshot.exists()) {
+        callback(snapshot.val());
+      }
+    });
+  };
+
+  // ── Mark Firebase as ready ──
+  window.firebaseReady = true;
+  const dot = document.getElementById('fbDot');
+  const txt = document.getElementById('fbStatus');
+  if(dot) { dot.style.background='#f59e0b'; }
+  if(txt) txt.textContent = '🔄 Firebase connected — loading data...';
+
+  console.log('✅ Firebase SDK loaded!');
+</script>
 <style>
 :root {
   --bg:#0a0e1a; --surface:#111827; --surface2:#1c2537; --border:#1e2d45;
@@ -203,6 +276,14 @@ tbody td{padding:9px 10px;font-size:0.81rem;}
 .user-badge:hover{border-color:var(--red);}
 .user-dot{width:7px;height:7px;border-radius:50%;background:var(--green);}
 
+/* ── FIREBASE STATUS BAR ── */
+.firebase-bar{display:flex;align-items:center;gap:8px;padding:5px 26px;background:rgba(16,185,129,0.04);border-bottom:1px solid rgba(16,185,129,0.12);flex-wrap:wrap;}
+.fb-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex-shrink:0;transition:all 0.3s;}
+.fb-status{font-size:0.69rem;color:var(--muted);flex:1;}
+.fb-btn{font-size:0.69rem;padding:3px 10px;border-radius:6px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.08);color:var(--green);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.2s;}
+.fb-btn:hover{background:rgba(16,185,129,0.18);}
+.fb-label{font-size:0.68rem;font-weight:600;color:rgba(16,185,129,0.7);letter-spacing:0.05em;}
+
 </style>
 </head>
 <body>
@@ -269,6 +350,15 @@ tbody td{padding:9px 10px;font-size:0.81rem;}
     <div class="json-dot" id="jDot"></div>
     <div class="json-status" id="jStatus">Database not connected</div>
     <div id="jBtns" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"></div>
+  </div>
+
+  <!-- 🔥 FIREBASE STATUS BAR -->
+  <div class="firebase-bar" id="firebaseBar">
+    <span class="fb-label">🔥 FIREBASE</span>
+    <div class="fb-dot" id="fbDot" style="background:#f59e0b"></div>
+    <div class="fb-status" id="fbStatus">Connecting to Firebase...</div>
+    <button class="fb-btn" onclick="fbManualSync()">☁️ Sync Now</button>
+    <button class="fb-btn" onclick="fbPullFromCloud()" style="border-color:rgba(79,142,247,0.4);color:var(--accent);background:rgba(79,142,247,0.08);">⬇️ Load from Cloud</button>
   </div>
 
   <div class="content">
@@ -648,7 +738,8 @@ const PRELOADED = [
 // ============================================================
 // INIT
 // ============================================================
-function init() {
+async function init() {
+  // First load from localStorage (fast, instant)
   const saved = localStorage.getItem('expenseiq_v3');
   if (saved) {
     const d = JSON.parse(saved);
@@ -666,9 +757,105 @@ function init() {
   renderAll();
   renderReports();
   renderManageMonths();
+
+  // Then try to load from Firebase (cloud data)
+  const fbDot = document.getElementById('fbDot');
+  const fbTxt = document.getElementById('fbStatus');
+  try {
+    // Wait for Firebase to be ready (module loads async)
+    let waited = 0;
+    while (!window.firebaseReady && waited < 5000) {
+      await new Promise(r => setTimeout(r, 100));
+      waited += 100;
+    }
+    if (window.firebaseLoad) {
+      if(fbTxt) fbTxt.textContent = '🔄 Loading from Firebase cloud...';
+      const cloudData = await window.firebaseLoad();
+      if (cloudData && cloudData.expenses && cloudData.expenses.length > 0) {
+        // Cloud has more data or is newer — use cloud data
+        const cloudExpCount = cloudData.expenses.length;
+        const localExpCount = expenses.length;
+        if (cloudExpCount >= localExpCount) {
+          expenses = cloudData.expenses;
+          settings = {...settings,...(cloudData.settings||{})};
+          if (cloudData.months && cloudData.months.length) MONTHS = cloudData.months;
+          // Sync to localStorage too
+          localStorage.setItem('expenseiq_v3', JSON.stringify({expenses,settings,months:MONTHS}));
+          document.getElementById('budEmi').value = settings.budEmi||14000;
+          document.getElementById('budPersonal').value = settings.budPersonal||18000;
+          document.getElementById('setCurrency').value = settings.currency||'₹';
+          buildMonthList(); buildReportMonthDropdown(); renderAll(); renderReports(); renderManageMonths();
+          if(fbDot) { fbDot.style.background='#10b981'; fbDot.style.boxShadow='0 0 7px rgba(16,185,129,0.5)'; }
+          if(fbTxt) fbTxt.textContent = '✅ Cloud data loaded (' + cloudExpCount + ' transactions) — Last: ' + (cloudData.lastUpdated ? new Date(cloudData.lastUpdated).toLocaleString('en-IN') : 'unknown');
+          showToast('☁️ Firebase se latest data load hua!', 'success');
+        } else {
+          // Local has more — push local to cloud
+          if(fbTxt) fbTxt.textContent = '⬆️ Local data is newer — syncing to cloud...';
+          await window.firebaseSave(expenses, settings, MONTHS);
+          if(fbDot) { fbDot.style.background='#10b981'; fbDot.style.boxShadow='0 0 7px rgba(16,185,129,0.5)'; }
+          if(fbTxt) fbTxt.textContent = '✅ Firebase synced — ' + localExpCount + ' transactions';
+        }
+      } else {
+        // Firebase empty — push local data to cloud
+        if(fbTxt) fbTxt.textContent = '⬆️ Firebase empty — uploading local data...';
+        await window.firebaseSave(expenses, settings, MONTHS);
+        if(fbDot) { fbDot.style.background='#10b981'; fbDot.style.boxShadow='0 0 7px rgba(16,185,129,0.5)'; }
+        if(fbTxt) fbTxt.textContent = '✅ Data Firebase mein upload ho gaya! (' + expenses.length + ' transactions)';
+        showToast('🔥 Data Firebase mein save ho gaya!', 'success');
+      }
+    }
+  } catch(e) {
+    console.error('Firebase init error:', e);
+    if(fbDot) { fbDot.style.background='#ef4444'; }
+    if(fbTxt) fbTxt.textContent = '❌ Firebase error: ' + e.message + ' — Local data use ho raha hai';
+  }
 }
 
-function save() { localStorage.setItem('expenseiq_v3', JSON.stringify({expenses,settings,months:MONTHS})); }
+function save() {
+  // Save to localStorage (instant)
+  localStorage.setItem('expenseiq_v3', JSON.stringify({expenses,settings,months:MONTHS}));
+  // Save to Firebase (async, background)
+  if (window.firebaseSave) {
+    const fbDot = document.getElementById('fbDot');
+    const fbTxt = document.getElementById('fbStatus');
+    if(fbDot) { fbDot.style.background='#f59e0b'; fbDot.style.boxShadow='0 0 7px rgba(245,158,11,0.5)'; }
+    if(fbTxt) fbTxt.textContent = '🔄 Firebase mein save ho raha hai...';
+    window.firebaseSave(expenses, settings, MONTHS);
+  }
+}
+
+// Manual Firebase sync button
+async function fbManualSync() {
+  if (!window.firebaseSave) { showToast('❌ Firebase load nahi hua abhi tak', 'error'); return; }
+  const fbTxt = document.getElementById('fbStatus');
+  if(fbTxt) fbTxt.textContent = '🔄 Manually syncing...';
+  await window.firebaseSave(expenses, settings, MONTHS);
+  showToast('✅ Firebase sync complete!', 'success');
+}
+
+// Pull latest data from Firebase
+async function fbPullFromCloud() {
+  if (!window.firebaseLoad) { showToast('❌ Firebase load nahi hua abhi tak', 'error'); return; }
+  const fbTxt = document.getElementById('fbStatus');
+  if(fbTxt) fbTxt.textContent = '🔄 Cloud se data load ho raha hai...';
+  const cloudData = await window.firebaseLoad();
+  if (cloudData && cloudData.expenses) {
+    if (!confirm('Cloud se ' + cloudData.expenses.length + ' transactions milenge. Current data replace hoga. Continue?')) return;
+    expenses = cloudData.expenses;
+    settings = {...settings,...(cloudData.settings||{})};
+    if (cloudData.months && cloudData.months.length) MONTHS = cloudData.months;
+    localStorage.setItem('expenseiq_v3', JSON.stringify({expenses,settings,months:MONTHS}));
+    document.getElementById('budEmi').value = settings.budEmi||14000;
+    document.getElementById('budPersonal').value = settings.budPersonal||18000;
+    document.getElementById('setCurrency').value = settings.currency||'₹';
+    buildMonthList(); buildReportMonthDropdown(); renderAll(); renderReports(); renderManageMonths();
+    showToast('☁️ Cloud se ' + expenses.length + ' transactions load ho gaye!', 'success');
+    if(fbTxt) fbTxt.textContent = '✅ Cloud data loaded — ' + expenses.length + ' transactions';
+  } else {
+    showToast('☁️ Firebase mein koi data nahi mila', 'error');
+    if(fbTxt) fbTxt.textContent = '⚠️ Firebase mein koi data nahi';
+  }
+}
 function fmt(n) { return (settings.currency||'₹')+(n||0).toLocaleString('en-IN'); }
 
 let toastTimer = null;
@@ -2347,7 +2534,7 @@ document.getElementById('addModal').addEventListener('click',e=>{
     document.getElementById('loginScreen').style.display = 'none';
     const creds = getCredentials();
     document.getElementById('topbarUsername').textContent = creds.username;
-    init();
+    (async()=>{ await init(); })();
     (async()=>{ await jInit(); })();
   } else {
     document.getElementById('loginScreen').style.display = 'flex';
