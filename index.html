@@ -106,6 +106,14 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .month-pill:hover{background:var(--surface2);color:var(--text);}
 .month-pill.active{background:rgba(79,142,247,0.12);color:var(--accent);font-weight:500;}
 .month-pill .badge{font-size:0.62rem;padding:1px 6px;background:var(--surface2);border-radius:10px;}
+/* Year accordion */
+.year-group{margin-bottom:4px;}
+.year-header{display:flex;align-items:center;justify-content:space-between;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:0.72rem;font-weight:700;color:var(--accent);letter-spacing:0.06em;text-transform:uppercase;transition:background 0.2s;user-select:none;}
+.year-header:hover{background:var(--surface2);}
+.year-arrow{font-size:0.65rem;transition:transform 0.25s;display:inline-block;}
+.year-arrow.open{transform:rotate(90deg);}
+.year-months{overflow:hidden;transition:max-height 0.3s ease;max-height:0;}
+.year-months.open{max-height:600px;}
 
 /* MAIN */
 .main{margin-left:240px;flex:1;}
@@ -365,7 +373,7 @@ tbody td{padding:9px 10px;font-size:0.81rem;}
 
     <!-- DASHBOARD -->
     <div class="page active" id="page-dashboard">
-      <div class="stats-grid" id="statsGrid"></div>
+      <div class="stats-grid" id="statsGrid" style="grid-template-columns:repeat(4,1fr);"></div>
       <div class="budget-section">
         <div class="budget-header">
           <span class="budget-title">📐 Monthly Budget: ₹32,000 &nbsp;(EMI ₹14,000 + Personal ₹18,000)</span>
@@ -373,28 +381,15 @@ tbody td{padding:9px 10px;font-size:0.81rem;}
         </div>
         <div class="budget-bars" id="budgetBars"></div>
       </div>
-      <div class="two-col">
-        <div class="chart-card">
-          <div class="chart-title">📈 Monthly Spending Trend</div>
-          <div class="chart-wrap" id="trendChart"></div>
-          <div style="display:flex;gap:12px;margin-top:10px;">
-            <span style="font-size:0.7rem;color:var(--muted);display:flex;align-items:center;gap:4px;"><span style="width:9px;height:9px;border-radius:2px;background:var(--emi);display:inline-block"></span>EMI/Loan</span>
-            <span style="font-size:0.7rem;color:var(--muted);display:flex;align-items:center;gap:4px;"><span style="width:9px;height:9px;border-radius:2px;background:var(--personal);display:inline-block"></span>Personal</span>
-          </div>
-        </div>
-        <div class="chart-card">
-          <div class="chart-title">🧩 Category Breakdown</div>
-          <div class="breakdown" id="categoryBreakdown"></div>
-        </div>
+      <div class="chart-card" style="margin-bottom:14px;">
+        <div class="chart-title">🧩 Category Breakdown</div>
+        <div class="breakdown" id="categoryBreakdown"></div>
       </div>
       <!-- YEARLY BUDGET ANALYSIS -->
       <div class="budget-section" style="margin-bottom:20px;">
         <div class="budget-header">
           <span class="budget-title">📊 Yearly Budget Analysis</span>
-          <div style="display:flex;gap:6px;">
-            <button class="btn btn-ghost btn-sm" id="ya2025btn" onclick="setAnalysisYear('2025')">2025</button>
-            <button class="btn btn-ghost btn-sm" id="ya2026btn" onclick="setAnalysisYear('2026')">2026</button>
-          </div>
+          <div style="display:flex;gap:6px;" id="yearlyAnalysisBtns"></div>
         </div>
         <div id="yearlyAnalysisBody"></div>
       </div>
@@ -447,7 +442,9 @@ tbody td{padding:9px 10px;font-size:0.81rem;}
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
           <select id="rptYear" style="padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Sans',sans-serif;outline:none;font-size:0.82rem;">
             <option value="2025">2025</option>
-            <option value="2026">2026</option>
+            <option value="2026" selected>2026</option>
+            <option value="2027">2027</option>
+            <option value="2028">2028</option>
           </select>
           <button class="btn btn-ghost" onclick="exportYearPDF()">📄 PDF Download</button>
           <button class="btn btn-green" onclick="exportYearExcel()">📊 Excel Download</button>
@@ -609,6 +606,10 @@ tbody td{padding:9px 10px;font-size:0.81rem;}
       <label>Amount (₹)</label>
       <input type="number" id="inAmount" placeholder="0">
     </div>
+    <div class="form-group">
+      <label>Month</label>
+      <select id="inMonth" style="width:100%;padding:9px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.83rem;font-family:'DM Sans',sans-serif;outline:none;"></select>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" id="modalSaveBtn" onclick="saveExpense()">Save</button>
@@ -623,13 +624,63 @@ tbody td{padding:9px 10px;font-size:0.81rem;}
 // ============================================================
 // DATA
 // ============================================================
-let MONTHS = ['April 2025','May 2025','June 2025','July 2025','August 2025','September 2025','October 2025','November 2025','December 2025','January 2026','February 2026','March 2026'];
+// Generate all months from Jan 2025 to Dec 2028
+const ALL_MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function generateMonthsRange(fromYear, toYear) {
+  const result = [];
+  for (let y = fromYear; y <= toYear; y++) {
+    ALL_MONTH_NAMES.forEach(m => result.push(m + ' ' + y));
+  }
+  return result;
+}
+let MONTHS = generateMonthsRange(2025, 2028);
 let settings = { budEmi:14000, budPersonal:18000, currency:'₹' };
 let expenses = [];
 let currentMonth = MONTHS[MONTHS.length-1];
 let currentFilter = 'all';
 let nextId = 300;
 let undoStack = []; // stores last deleted entries for undo
+
+// Normalize expenses — Firebase se string ids/amounts aa sakte hain
+function normalizeExpenses(arr) {
+  const seen = new Set();
+  let maxId = 300;
+  // First pass: collect all valid numeric ids
+  const result = arr.map(e => {
+    let id = Number(e.id);
+    if (isNaN(id) || id === 0) id = null; // invalid
+    return { ...e, id, amt: Number(e.amt) || 0 };
+  });
+  // Second pass: assign unique ids to entries that don't have one
+  return result.map(e => {
+    if (e.id && !isNaN(e.id) && !seen.has(e.id)) {
+      seen.add(e.id);
+      if (e.id > maxId) maxId = e.id;
+      return e;
+    } else {
+      // Assign new unique id
+      maxId++;
+      seen.add(maxId);
+      return { ...e, id: maxId };
+    }
+  });
+}
+
+// Set currentMonth to real-world current month (or latest available)
+function setCurrentMonthToToday() {
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const now = new Date();
+  const todayMonth = monthNames[now.getMonth()] + ' ' + now.getFullYear();
+  // If today's month exists in MONTHS, select it; otherwise pick the latest month
+  if (MONTHS.includes(todayMonth)) {
+    currentMonth = todayMonth;
+  } else {
+    currentMonth = MONTHS[MONTHS.length - 1];
+  }
+  // Also expand that year
+  const yr = currentMonth.split(' ')[1];
+  expandedYears.add(yr);
+}
 
 const PRELOADED = [
   {id:1,date:'2025-04-08',desc:'Rent',cat:'emi',amt:5800,month:'April 2025'},
@@ -743,12 +794,23 @@ async function init() {
   const saved = localStorage.getItem('expenseiq_v3');
   if (saved) {
     const d = JSON.parse(saved);
-    expenses = d.expenses || [...PRELOADED];
+    expenses = normalizeExpenses(d.expenses || [...PRELOADED]);
+    nextId = Math.max(...expenses.map(e => e.id), 300) + 1;
     settings = {...settings,...(d.settings||{})};
-    if (d.months && d.months.length) MONTHS = d.months;
+    if (d.months && d.months.length) {
+      // Merge saved months with full preset — ensure all 2025-2028 months exist
+      const fullRange = generateMonthsRange(2025, 2028);
+      const merged = [...new Set([...fullRange, ...d.months])];
+      merged.sort((a, b) => {
+        const [am, ay] = a.split(' '); const [bm, by] = b.split(' ');
+        return parseInt(ay) !== parseInt(by) ? parseInt(ay) - parseInt(by) : ALL_MONTH_NAMES.indexOf(am) - ALL_MONTH_NAMES.indexOf(bm);
+      });
+      MONTHS = merged;
+    }
   } else {
     expenses = [...PRELOADED];
   }
+  setCurrentMonthToToday();
   document.getElementById('budEmi').value = settings.budEmi||14000;
   document.getElementById('budPersonal').value = settings.budPersonal||18000;
   document.getElementById('setCurrency').value = settings.currency||'₹';
@@ -776,11 +838,23 @@ async function init() {
         const cloudExpCount = cloudData.expenses.length;
         const localExpCount = expenses.length;
         if (cloudExpCount >= localExpCount) {
-          expenses = cloudData.expenses;
+          expenses = normalizeExpenses(cloudData.expenses);
+          nextId = Math.max(...expenses.map(e => e.id), 300) + 1;
           settings = {...settings,...(cloudData.settings||{})};
-          if (cloudData.months && cloudData.months.length) MONTHS = cloudData.months;
+          if (cloudData.months && cloudData.months.length) {
+            const fullRange = generateMonthsRange(2025, 2028);
+            const merged = [...new Set([...fullRange, ...cloudData.months])];
+            merged.sort((a, b) => {
+              const [am, ay] = a.split(' '); const [bm, by] = b.split(' ');
+              return parseInt(ay) !== parseInt(by) ? parseInt(ay) - parseInt(by) : ALL_MONTH_NAMES.indexOf(am) - ALL_MONTH_NAMES.indexOf(bm);
+            });
+            MONTHS = merged;
+          }
           // Sync to localStorage too
           localStorage.setItem('expenseiq_v3', JSON.stringify({expenses,settings,months:MONTHS}));
+          // currentMonth reset mat karo — user already kisi month pe ho sakta hai
+          // Sirf agar currentMonth MONTHS mein nahi hai toh fix karo
+          if (!MONTHS.includes(currentMonth)) setCurrentMonthToToday();
           document.getElementById('budEmi').value = settings.budEmi||14000;
           document.getElementById('budPersonal').value = settings.budPersonal||18000;
           document.getElementById('setCurrency').value = settings.currency||'₹';
@@ -841,10 +915,20 @@ async function fbPullFromCloud() {
   const cloudData = await window.firebaseLoad();
   if (cloudData && cloudData.expenses) {
     if (!confirm('Cloud se ' + cloudData.expenses.length + ' transactions milenge. Current data replace hoga. Continue?')) return;
-    expenses = cloudData.expenses;
+    expenses = normalizeExpenses(cloudData.expenses);
+    nextId = Math.max(...expenses.map(e => e.id), 300) + 1;
     settings = {...settings,...(cloudData.settings||{})};
-    if (cloudData.months && cloudData.months.length) MONTHS = cloudData.months;
+    if (cloudData.months && cloudData.months.length) {
+      const fullRange = generateMonthsRange(2025, 2028);
+      const merged = [...new Set([...fullRange, ...cloudData.months])];
+      merged.sort((a, b) => {
+        const [am, ay] = a.split(' '); const [bm, by] = b.split(' ');
+        return parseInt(ay) !== parseInt(by) ? parseInt(ay) - parseInt(by) : ALL_MONTH_NAMES.indexOf(am) - ALL_MONTH_NAMES.indexOf(bm);
+      });
+      MONTHS = merged;
+    }
     localStorage.setItem('expenseiq_v3', JSON.stringify({expenses,settings,months:MONTHS}));
+    if (!MONTHS.includes(currentMonth)) setCurrentMonthToToday();
     document.getElementById('budEmi').value = settings.budEmi||14000;
     document.getElementById('budPersonal').value = settings.budPersonal||18000;
     document.getElementById('setCurrency').value = settings.currency||'₹';
@@ -857,6 +941,15 @@ async function fbPullFromCloud() {
   }
 }
 function fmt(n) { return (settings.currency||'₹')+(n||0).toLocaleString('en-IN'); }
+
+// Format date: "2026-05-15" → "15-May-2026"
+function fmtDate(d) {
+  if (!d) return '';
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const parts = d.split('-');
+  if (parts.length !== 3) return d;
+  return parts[2] + '-' + months[parseInt(parts[1],10)-1] + '-' + parts[0];
+}
 
 let toastTimer = null;
 function showToast(msg, type='success') {
@@ -880,47 +973,105 @@ function showUndoToast(entry) {
 // ============================================================
 // SIDEBAR MONTHS
 // ============================================================
+// Track which years are expanded
+let expandedYears = new Set();
+
 function buildMonthList() {
   const ml = document.getElementById('monthList');
   ml.innerHTML = '';
+
+  // Group months by year
+  const yearMap = {};
   MONTHS.forEach(m => {
-    const total = expenses.filter(e=>e.month===m).reduce((s,e)=>s+e.amt,0);
-    const d = document.createElement('div');
-    d.className = 'month-pill'+(m===currentMonth?' active':'');
-    d.id = 'mpill-'+m.replace(/\s/g,'');
-    d.innerHTML = `<span>${m}</span><span class="badge">${fmt(total)}</span>`;
-    d.onclick = ()=>selectMonth(m);
-    ml.appendChild(d);
+    const year = m.split(' ')[1];
+    if (!yearMap[year]) yearMap[year] = [];
+    yearMap[year].push(m);
+  });
+
+  // Auto-expand the year of currentMonth ONLY if no years are expanded yet (first load)
+  const currentYear = currentMonth ? currentMonth.split(' ')[1] : null;
+  if (currentYear && expandedYears.size === 0) expandedYears.add(currentYear);
+
+  const years = Object.keys(yearMap).sort();
+  years.forEach(year => {
+    const isOpen = expandedYears.has(year);
+
+    // Year header
+    const yearDiv = document.createElement('div');
+    yearDiv.className = 'year-group';
+
+    const header = document.createElement('div');
+    header.className = 'year-header';
+    header.innerHTML = `<span>📅 ${year}</span><span class="year-arrow ${isOpen?'open':''}">▶</span>`;
+    header.onclick = () => {
+      if (expandedYears.has(year)) {
+        expandedYears.delete(year);
+      } else {
+        expandedYears.add(year);
+      }
+      buildMonthList();
+    };
+
+    // Months container
+    const monthsDiv = document.createElement('div');
+    monthsDiv.className = 'year-months' + (isOpen ? ' open' : '');
+
+    yearMap[year].forEach(m => {
+      const total = expenses.filter(e=>e.month===m).reduce((s,e)=>s+e.amt,0);
+      const pill = document.createElement('div');
+      pill.className = 'month-pill' + (m===currentMonth?' active':'');
+      pill.id = 'mpill-'+m.replace(/\s/g,'');
+      pill.innerHTML = `<span>${m.split(' ')[0]}</span><span class="badge">${fmt(total)}</span>`;
+      pill.onclick = ()=>selectMonth(m);
+      monthsDiv.appendChild(pill);
+    });
+
+    yearDiv.appendChild(header);
+    yearDiv.appendChild(monthsDiv);
+    ml.appendChild(yearDiv);
   });
 }
 
 function selectMonth(m) {
   currentMonth = m;
-  document.querySelectorAll('.month-pill').forEach(el=>el.classList.remove('active'));
-  const p = document.getElementById('mpill-'+m.replace(/\s/g,''));
-  if(p) p.classList.add('active');
+  // Ensure the selected month's year is expanded
+  const yr = m.split(' ')[1];
+  expandedYears.add(yr);
+  buildMonthList();
   renderAll();
 }
 
 // ============================================================
 // RENDER DASHBOARD
 // ============================================================
-let analysisYear = '2025';
+let analysisYear = String(new Date().getFullYear());
+
+function buildYearlyAnalysisBtns() {
+  const container = document.getElementById('yearlyAnalysisBtns');
+  if (!container) return;
+  const years = ['2025','2026','2027','2028'];
+  container.innerHTML = years.map(yr =>
+    `<button class="btn btn-ghost btn-sm" id="ya${yr}btn" onclick="setAnalysisYear('${yr}')">${yr}</button>`
+  ).join('');
+  // Highlight current
+  years.forEach(yr => {
+    const b = document.getElementById('ya'+yr+'btn');
+    if (!b) return;
+    if (yr === analysisYear) { b.style.background='var(--accent)'; b.style.color='#fff'; }
+    else { b.style.background=''; b.style.color=''; }
+  });
+}
 
 function setAnalysisYear(y) {
   analysisYear = y;
-  ['2025','2026'].forEach(yr => {
-    const b = document.getElementById('ya'+yr+'btn');
-    if (!b) return;
-    if (yr === y) { b.style.background='var(--accent)'; b.style.color='#fff'; }
-    else { b.style.background=''; b.style.color=''; }
-  });
+  buildYearlyAnalysisBtns();
   renderYearlyAnalysis();
 }
 
 function renderAll() {
   document.getElementById('pageSubtitle').textContent = currentMonth;
-  renderStats(); renderBudgetBars(); renderTrend(); renderBreakdown();
+  buildYearlyAnalysisBtns();
+  renderStats(); renderBudgetBars(); renderBreakdown();
   renderYearlyAnalysis(); renderRecentTx(); renderAllTx();
 }
 
@@ -931,11 +1082,19 @@ function renderStats() {
   const total = emi+per;
   const budTotal = (settings.budEmi||14000)+(settings.budPersonal||18000);
   const bal = budTotal - total;
+  const spentPct = Math.min(Math.round((total/budTotal)*100),100);
+  const balClr = bal>=0?'var(--green)':'var(--red)';
   document.getElementById('statsGrid').innerHTML = `
     <div class="stat-card">
       <div class="stat-label">Total Spent</div>
       <div class="stat-value" style="color:var(--red)">${fmt(total)}</div>
-      <div class="stat-sub">${exp.length} transactions is mahine</div>
+      <div class="stat-sub" style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+        <span>Budget: <b style="color:var(--text)">${fmt(budTotal)}</b></span>
+        <span style="color:${spentPct>=100?'var(--red)':spentPct>=85?'var(--amber)':'var(--muted)'}">${spentPct}% used</span>
+      </div>
+      <div style="margin-top:6px;height:5px;background:var(--surface2);border-radius:99px;overflow:hidden;">
+        <div style="height:100%;width:${spentPct}%;background:${spentPct>=100?'var(--red)':spentPct>=85?'var(--amber)':'var(--accent)'};border-radius:99px;transition:width 0.5s;"></div>
+      </div>
     </div>
     <div class="stat-card">
       <div class="stat-label">EMI / Loans</div>
@@ -943,9 +1102,14 @@ function renderStats() {
       <div class="stat-sub">${exp.filter(e=>e.cat==='emi').length} EMI entries</div>
     </div>
     <div class="stat-card">
+      <div class="stat-label">Personal Expense</div>
+      <div class="stat-value" style="color:var(--personal)">${fmt(per)}</div>
+      <div class="stat-sub">${exp.filter(e=>e.cat==='personal').length} personal entries</div>
+    </div>
+    <div class="stat-card">
       <div class="stat-label">${bal>=0?'Budget Remaining':'Over Budget'}</div>
-      <div class="stat-value ${bal>=0?'surplus':'deficit'}">${fmt(Math.abs(bal))}</div>
-      <div class="stat-sub">Personal Expense: ${fmt(per)}</div>
+      <div class="stat-value" style="color:${balClr}">${fmt(Math.abs(bal))}</div>
+      <div class="stat-sub" style="color:${balClr}">${bal>=0?'✅ Under budget':'❌ Limit cross ho gaya'}</div>
     </div>`;
 }
 
@@ -1187,15 +1351,16 @@ function renderYearlyAnalysis() {
 function txRow(e, full) {
   const catMap = {emi:['tag-emi','amount-emi','EMI/Loan'],personal:['tag-personal','amount-personal','Personal']};
   const [tc,ac,cl] = catMap[e.cat]||catMap.personal;
+  // Use data-id attribute to safely pass id (avoids string/number type issues in onclick)
   return `<tr>
-    <td style="color:var(--muted)">${e.date}</td>
+    <td style="color:var(--muted)">${fmtDate(e.date)}</td>
     <td>${e.desc}</td>
     <td><span class="tag ${tc}">${cl}</span></td>
     <td class="${ac}">${fmt(e.amt)}</td>
     ${full?`<td style="color:var(--muted);font-size:0.76rem">${e.month}</td>`:''}
     <td><div class="action-btns">
-      <button class="btn btn-ghost btn-sm" title="Edit" onclick="openEditModal(${e.id})">✏️</button>
-      <button class="btn btn-danger btn-sm" title="Delete" onclick="deleteExpense(${e.id})">🗑</button>
+      <button class="btn btn-ghost btn-sm" title="Edit" data-id="${e.id}" onclick="openEditModal(this.dataset.id)">✏️</button>
+      <button class="btn btn-danger btn-sm" title="Delete" data-id="${e.id}" onclick="deleteExpense(this.dataset.id)">🗑</button>
     </div></td>
   </tr>`;
 }
@@ -1285,6 +1450,17 @@ function removeMonth(m) {
 // ============================================================
 // ADD / EDIT / DELETE
 // ============================================================
+function populateMonthDropdown(selectedMonth) {
+  const sel = document.getElementById('inMonth');
+  sel.innerHTML = '';
+  MONTHS.forEach(m => {
+    const o = document.createElement('option');
+    o.value = m; o.textContent = m;
+    if (m === selectedMonth) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
 function openAddModal() {
   document.getElementById('modalTitle').textContent = '＋ Add New Expense';
   document.getElementById('modalSaveBtn').textContent = 'Save';
@@ -1293,19 +1469,22 @@ function openAddModal() {
   document.getElementById('inDesc').value = '';
   document.getElementById('inAmount').value = '';
   document.getElementById('inCategory').value = 'emi';
+  populateMonthDropdown(currentMonth);
   document.getElementById('addModal').classList.add('open');
 }
 
 function openEditModal(id) {
-  const e = expenses.find(x=>x.id===id);
+  // Normalize: Firebase se string aa sakta hai, HTML se number — dono handle karo
+  const e = expenses.find(x => String(x.id) === String(id));
   if(!e) return;
   document.getElementById('modalTitle').textContent = '✏️ Edit Expense';
   document.getElementById('modalSaveBtn').textContent = 'Update';
-  document.getElementById('editId').value = id;
+  document.getElementById('editId').value = String(e.id);
   document.getElementById('inDate').value = e.date;
   document.getElementById('inDesc').value = e.desc;
   document.getElementById('inAmount').value = e.amt;
   document.getElementById('inCategory').value = e.cat;
+  populateMonthDropdown(e.month);
   document.getElementById('addModal').classList.add('open');
 }
 
@@ -1317,37 +1496,36 @@ function saveExpense() {
   const cat  = document.getElementById('inCategory').value;
   const desc = document.getElementById('inDesc').value.trim();
   const amt  = parseFloat(document.getElementById('inAmount').value);
+  const month = document.getElementById('inMonth').value;
   if(!date||!desc||!amt||amt<=0){ showToast('Kripya sab fields sahi bharen!','error'); return; }
 
   if(editId) {
-    // EDIT mode
-    const idx = expenses.findIndex(x=>x.id===parseInt(editId));
+    // EDIT mode — String compare for Firebase compatibility
+    const idx = expenses.findIndex(x => String(x.id) === String(editId));
     if(idx>-1) {
-      const [ey,em,ed] = date.split('-').map(Number);
-      const monthNames2 = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-      const mn = monthNames2[em-1] + ' ' + ey;
-      const target = MONTHS.find(m=>m===mn)||expenses[idx].month;
-      expenses[idx] = {...expenses[idx], date, cat, desc, amt, month:target};
+      expenses[idx] = {...expenses[idx], date, cat, desc, amt, month};
+      currentMonth = month; // edited entry ke month pe switch karo
       showToast('✅ Transaction update ho gaya!');
     }
   } else {
     // ADD mode
-    const [dy,dm,dd] = date.split('-').map(Number);
-    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    const mn = monthNames[dm-1] + ' ' + dy;
-    const target = MONTHS.find(m=>m===mn)||currentMonth;
-    expenses.push({id:nextId++, date, desc, cat, amt, month:target});
+    expenses.push({id:nextId++, date, desc, cat, amt, month});
+    currentMonth = month; // naye entry ke month pe switch karo
     showToast('✅ Expense add ho gaya!');
   }
   save(); buildMonthList(); renderAll(); renderReports(); closeModal(); jAutoSaveFn();
 }
 
 function deleteExpense(id) {
-  const deleted = expenses.find(e=>e.id===id);
+  // String compare — Firebase se string id aa sakta hai, HTML se number
+  const deleted = expenses.find(e => String(e.id) === String(id));
   if(!deleted) return;
+  if(!confirm(`"${deleted.desc}" (${deleted.month}) — delete karna chahte ho?`)) return;
+  const monthToStay = currentMonth; // currentMonth preserve karo
   undoStack.push(deleted);
   if(undoStack.length > 10) undoStack.shift(); // keep last 10
-  expenses = expenses.filter(e=>e.id!==id);
+  expenses = expenses.filter(e => String(e.id) !== String(id));
+  currentMonth = monthToStay; // delete ke baad wahi month raho
   save(); buildMonthList(); renderAll(); renderReports(); jAutoSaveFn();
   showUndoToast(deleted);
 }
@@ -1415,7 +1593,7 @@ function renderReports() {
       </tr></thead><tbody>`;
   exp.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(e=>{
     mHtml += `<tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
-      <td style="padding:7px 8px;color:var(--muted)">${e.date}</td>
+      <td style="padding:7px 8px;color:var(--muted)">${fmtDate(e.date)}</td>
       <td style="padding:7px 8px">${e.desc}</td>
       <td style="padding:7px 8px"><span class="tag ${e.cat==='emi'?'tag-emi':'tag-personal'}">${e.cat==='emi'?'EMI/Loan':'Personal'}</span></td>
       <td style="padding:7px 8px;text-align:right;color:${e.cat==='emi'?'var(--emi)':'var(--personal)'};font-weight:600">${fmt(e.amt)}</td>
@@ -1638,7 +1816,7 @@ function exportMonthPDF() {
 
   let rows = exp.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(e=>`
     <tr>
-      <td>${e.date}</td><td>${e.desc}</td>
+      <td>${fmtDate(e.date)}</td><td>${e.desc}</td>
       <td>${e.cat==='emi'?'EMI/Loan':'Personal'}</td>
       <td style="text-align:right;color:${e.cat==='emi'?'#4f8ef7':'#f59e0b'};font-weight:600">${f(e.amt)}</td>
     </tr>`).join('');
@@ -1861,7 +2039,7 @@ function exportMonthExcel() {
     [`Generated: ${new Date().toLocaleDateString('en-IN')}`],
     [],
     ['Date','Description','Category','Amount'],
-    ...exp.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(e=>[e.date,e.desc,e.cat==='emi'?'EMI/Loan':'Personal',e.amt]),
+    ...exp.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(e=>[fmtDate(e.date),e.desc,e.cat==='emi'?'EMI/Loan':'Personal',e.amt]),
     [],
     ['','','Total',total],
     ['','','EMI Budget',bE],
@@ -1910,7 +2088,7 @@ function exportYearExcel() {
     const mRows = [
       [`${m} – Expense Report`],[],
       ['Date','Description','Category','Amount'],
-      ...exp.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(e=>[e.date,e.desc,e.cat==='emi'?'EMI/Loan':'Personal',e.amt]),
+      ...exp.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(e=>[fmtDate(e.date),e.desc,e.cat==='emi'?'EMI/Loan':'Personal',e.amt]),
       [],['','','Total',total],['','','EMI Budget',bE],['','','Personal Budget',bP],['','','Remaining',(bE+bP)-total],
     ];
     const ws = XLSX.utils.aoa_to_sheet(mRows);
@@ -2171,7 +2349,7 @@ function exportAllExcel() {
     [],
     ['ID','Date','Month','Description','Category','Amount'],
     ...expenses.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(e=>[
-      e.id, e.date, e.month, e.desc,
+      e.id, fmtDate(e.date), e.month, e.desc,
       e.cat==='emi'?'EMI/Loan':'Personal', e.amt
     ]),
     [],
